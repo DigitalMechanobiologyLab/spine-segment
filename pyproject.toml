@@ -28,6 +28,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
+beta = ["nnunetv2>=2,<3", "scipy>=1.11"]
 
 [project.scripts]
 spine-segment = "spine_segment.cli:main"

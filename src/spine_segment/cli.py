@@ -69,6 +69,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Existing *_centroids.json artifact used by --level-only instead of localization.",
     )
     parser.add_argument(
+        "--beta-detailed-model",
+        help="Experimental Dataset737 nnU-Net model folder; writes ten-class per-vertebra mask labels.",
+    )
+    parser.add_argument(
         "--sequence-confidence-weight",
         type=float,
         default=SpineSequenceConfig().lambda_weight,
@@ -129,6 +133,14 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--centroids requires exactly one input CT.")
     if args.centroids and not Path(args.centroids).is_file():
         parser.error(f"Centroid artifact does not exist: {args.centroids}")
+    if args.beta_detailed_model and (args.level_only or args.localization_only):
+        parser.error("--beta-detailed-model requires full segmentation")
+    if args.beta_detailed_model:
+        from spine_segment.beta_subregions import _validate_model_folder
+        try:
+            _validate_model_folder(Path(args.beta_detailed_model))
+        except ValueError as exc:
+            parser.error(str(exc))
 
     try:
         sequence_config = SpineSequenceConfig(lambda_weight=args.sequence_confidence_weight)
@@ -164,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
             level_only=bool(args.level_only),
             localization_only=bool(args.localization_only),
             centroids_path=args.centroids,
+            beta_detailed_model=args.beta_detailed_model,
         )
     except SpineSegmentBackendError as exc:
         print(f"[spine-segment] backend error: {exc}")
@@ -171,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     except FileExistsError as exc:
         print(f"[spine-segment] output exists: {exc}")
         return 2
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RuntimeError) as exc:
         print(f"[spine-segment] input error: {exc}")
         return 2
 
@@ -188,6 +201,8 @@ def main(argv: list[str] | None = None) -> int:
             if not args.level_only:
                 fields.append(f"process_body={result.output_paths.process_body}")
                 fields.append(f"cort_trab={result.output_paths.cort_trab}")
+                if args.beta_detailed_model:
+                    fields.append(f"detailed_subregions={result.output_paths.detailed_subregions}")
         print("[spine-segment] " + " ".join(fields))
     return 0
 
