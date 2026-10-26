@@ -74,7 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--beta-detailed-labels",
         action="store_true",
-        help="Experimental ten-class vertebra labels; downloads the verified model on first use.",
+        help="Experimental ten-class vertebra labels; uses the packaged model or a verified download.",
     )
     parser.add_argument(
         "--beta-detailed-model",
