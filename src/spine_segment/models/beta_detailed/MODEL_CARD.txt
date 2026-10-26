@@ -1,0 +1,6 @@
+Dataset737 mask-only vertebra subregions, experimental checkpoint.
+Trained on non-fractured VerSe19 vertebra masks with generated morphology labels.
+The focal-outgrowth class is a candidate region, not a CT-confirmed osteophyte.
+VerSe data: CC BY-SA 4.0; Sekuboyina et al., Medical Image Analysis 2021,
+doi:10.1016/j.media.2021.102166.
+VerSe source and license: https://github.com/anjany/verse

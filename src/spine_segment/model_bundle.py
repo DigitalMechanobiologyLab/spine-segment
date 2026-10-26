@@ -25,8 +25,8 @@ DEFAULT_MODEL_BUNDLE_FILE_HASHES = {
     "weights/process-body-segmenter.pt": "fae180b16d090b9df96e9394b6a49e3ca2b8d1a7f80c25c72c413b3644ddb309",
 }
 
-# The experimental model is a separate, opt-in release asset so standard
-# installations do not download another checkpoint they will never use.
+# The experimental checkpoint is packaged in the beta wheel. The release asset
+# remains a verified fallback for installations built without the model data.
 BETA_DETAILED_MODEL_VERSION = "dataset737-v1"
 BETA_DETAILED_MODEL_ASSET = "spine-segment-beta-detailed-dataset737-v1.zip"
 BETA_DETAILED_MODEL_URL = (
@@ -240,10 +240,9 @@ def resolve_beta_detailed_model(
 ) -> Path:
     """Find a checked-out model or verified cache, downloading only when allowed."""
     from spine_segment.beta_subregions import _validate_model_folder
-    candidates = []
+    candidates = [Path(__file__).resolve().parent / "models" / "beta_detailed"]
     if bundle_root is not None:
         candidates.append(Path(bundle_root) / "beta_detailed")
-    candidates.append(Path(__file__).resolve().parents[2] / "build" / "model-bundle-pytorch" / "beta_detailed")
     for candidate in candidates:
         if candidate.is_dir():
             _verify_bundle_hashes(candidate, BETA_DETAILED_MODEL_FILE_HASHES)

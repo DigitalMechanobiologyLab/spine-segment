@@ -22,7 +22,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--model-folder",
         type=Path,
-        default=Path(__file__).resolve().parents[1] / "build/model-bundle-pytorch/beta_detailed",
+        default=Path(__file__).resolve().parents[1] / "src/spine_segment/models/beta_detailed",
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -33,15 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as output:
         for relative in BETA_DETAILED_MODEL_FILE_HASHES:
             output.write(args.model_folder / relative, f"beta_detailed/{relative}")
-        output.writestr(
-            "beta_detailed/MODEL_CARD.txt",
-            "Dataset737 mask-only vertebra subregions, experimental checkpoint.\n"
-            "Trained on non-fractured VerSe19 vertebra masks with generated morphology labels.\n"
-            "The focal-outgrowth class is a candidate region, not a CT-confirmed osteophyte.\n"
-            "VerSe data: CC BY-SA 4.0; Sekuboyina et al., Medical Image Analysis 2021, "
-            "doi:10.1016/j.media.2021.102166.\n"
-            "VerSe source and license: https://github.com/anjany/verse\n",
-        )
+        output.write(args.model_folder / "MODEL_CARD.txt", "beta_detailed/MODEL_CARD.txt")
     print(archive)
     return 0
 

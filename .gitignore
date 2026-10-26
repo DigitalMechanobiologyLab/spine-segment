@@ -10,8 +10,3 @@ build/*
 !build/model-bundle-pytorch/manifest.json
 !build/model-bundle-pytorch/weights/
 !build/model-bundle-pytorch/weights/*.pt
-!build/model-bundle-pytorch/beta_detailed/
-!build/model-bundle-pytorch/beta_detailed/dataset.json
-!build/model-bundle-pytorch/beta_detailed/plans.json
-!build/model-bundle-pytorch/beta_detailed/fold_0/
-!build/model-bundle-pytorch/beta_detailed/fold_0/checkpoint_best.pth
