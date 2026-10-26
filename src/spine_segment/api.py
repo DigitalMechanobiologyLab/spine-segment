@@ -42,6 +42,7 @@ def segment_file(
     level_only: bool = False,
     localization_only: bool = False,
     centroids_path: str | Path | None = None,
+    beta_detailed_labels: bool = False,
     beta_detailed_model: str | Path | None = None,
 ) -> SegmentRunResult:
     if level_only and localization_only:
@@ -50,8 +51,15 @@ def segment_file(
         raise ValueError("centroids_path requires level_only=True")
     if centroids_path is not None and localization_only:
         raise ValueError("centroids_path cannot be combined with localization_only=True")
-    if beta_detailed_model is not None and (level_only or localization_only):
-        raise ValueError("beta_detailed_model requires full segmentation")
+    if beta_detailed_labels and beta_detailed_model is not None:
+        raise ValueError("Choose beta_detailed_labels or beta_detailed_model")
+    if (beta_detailed_labels or beta_detailed_model is not None) and (level_only or localization_only):
+        raise ValueError("Beta detailed labels require full segmentation")
+    if beta_detailed_labels:
+        from spine_segment.model_bundle import resolve_beta_detailed_model
+        beta_detailed_model = resolve_beta_detailed_model(
+            bundle_root=getattr(backend, "bundle_root", None)
+        )
 
     source_path = Path(input_path)
     image = read_image(source_path, pixel_type=sitk.sitkFloat32)
@@ -197,6 +205,7 @@ def segment_files(
     level_only: bool = False,
     localization_only: bool = False,
     centroids_path: str | Path | None = None,
+    beta_detailed_labels: bool = False,
     beta_detailed_model: str | Path | None = None,
 ) -> list[SegmentRunResult]:
     if centroids_path is not None and len(input_paths) != 1:
@@ -212,6 +221,7 @@ def segment_files(
             level_only=level_only,
             localization_only=localization_only,
             centroids_path=centroids_path,
+            beta_detailed_labels=beta_detailed_labels,
             beta_detailed_model=beta_detailed_model,
         )
         for path in input_paths

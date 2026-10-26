@@ -1,0 +1,21 @@
+{
+    "channel_names": {
+        "0": "vertebra_mask"
+    },
+    "labels": {
+        "background": 0,
+        "vertebral_body": 1,
+        "superior_endplate_surface": 2,
+        "inferior_endplate_surface": 3,
+        "focal_outgrowth_candidate": 4,
+        "pedicles": 5,
+        "lamina": 6,
+        "spinous_process": 7,
+        "transverse_processes": 8,
+        "superior_articular_processes": 9,
+        "inferior_articular_processes": 10
+    },
+    "numTraining": 194,
+    "file_ending": ".nii.gz",
+    "description": "VerSe19 grade-zero, mask-only morphology pseudo-labels; focal outgrowth candidate is not a CT-confirmed osteophyte"
+}

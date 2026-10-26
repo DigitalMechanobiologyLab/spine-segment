@@ -168,6 +168,22 @@ def test_segment_file_beta_writes_detailed_labels_and_provenance(tmp_path, monke
     assert payload["metadata"]["beta_detailed_subregions"]["anatomical_validation"] is False
 
 
+def test_segment_file_beta_auto_resolves_model(tmp_path, monkeypatch):
+    from spine_segment import beta_subregions, model_bundle
+    source = tmp_path / "case.nii.gz"
+    sitk.WriteImage(sitk.Image([6, 6, 6], sitk.sitkFloat32), str(source))
+    monkeypatch.setattr(model_bundle, "resolve_beta_detailed_model", lambda **k: tmp_path / "model")
+    def predict(levels, model_folder, *, device):
+        assert model_folder == tmp_path / "model"
+        detail = sitk.GetImageFromArray((sitk.GetArrayFromImage(levels) > 0).astype(np.uint8))
+        detail.CopyInformation(levels)
+        return detail, {}
+    monkeypatch.setattr(beta_subregions, "predict_detailed_subregions", predict)
+    result = segment_file(source, tmp_path / "out", backend=_StubBackend(),
+                          device="cpu", beta_detailed_labels=True)
+    assert result.output_paths.detailed_subregions.is_file()
+
+
 def test_beta_prediction_failure_does_not_leave_standard_outputs(tmp_path, monkeypatch):
     from spine_segment import beta_subregions
     source = tmp_path / "case.nii.gz"

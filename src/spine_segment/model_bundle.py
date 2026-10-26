@@ -25,6 +25,20 @@ DEFAULT_MODEL_BUNDLE_FILE_HASHES = {
     "weights/process-body-segmenter.pt": "fae180b16d090b9df96e9394b6a49e3ca2b8d1a7f80c25c72c413b3644ddb309",
 }
 
+# The experimental model is a separate, opt-in release asset so standard
+# installations do not download another checkpoint they will never use.
+BETA_DETAILED_MODEL_VERSION = "dataset737-v1"
+BETA_DETAILED_MODEL_ASSET = "spine-segment-beta-detailed-dataset737-v1.zip"
+BETA_DETAILED_MODEL_URL = (
+    "https://github.com/DigitalMechanobiologyLab/spine-segment/releases/download/"
+    f"beta-detailed-dataset737-v1/{BETA_DETAILED_MODEL_ASSET}"
+)
+BETA_DETAILED_MODEL_FILE_HASHES = {
+    "dataset.json": "d60703e230eae787936a44bacda583a80f7f917b389d3299848b4f7ab70606eb",
+    "plans.json": "a89d5b50d1363523aa22083a5c5c5b5a80902cb41677692e2fd0ffb47244c304",
+    "fold_0/checkpoint_best.pth": "ac1e9637d32e2c6ab03b3588480b910a9ce8e9d76d723dff3d85f07877dfc6ef",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class NativeTorchBundlePaths:
@@ -152,6 +166,97 @@ def ensure_default_native_torch_bundle(
             shutil.rmtree(bundle_root)
         shutil.move(str(staged_root), str(bundle_root))
     return bundle_root
+
+
+def cached_beta_detailed_model(
+    *, cache_root: str | Path | None = None,
+    file_hashes: dict[str, str] | None = None,
+) -> Path | None:
+    """Return the verified Dataset737 checkpoint in the user cache, if present."""
+    root = (
+        Path(cache_root).expanduser().resolve() / BETA_DETAILED_MODEL_VERSION
+        if cache_root is not None
+        else default_model_bundle_cache_dir(version=BETA_DETAILED_MODEL_VERSION)
+    )
+    try:
+        _verify_bundle_hashes(root, file_hashes or BETA_DETAILED_MODEL_FILE_HASHES)
+        from spine_segment.beta_subregions import _validate_model_folder
+        _validate_model_folder(root)
+    except (FileNotFoundError, ModelBundleDownloadError, ValueError):
+        return None
+    return root
+
+
+def ensure_beta_detailed_model(
+    *,
+    cache_root: str | Path | None = None,
+    download_url: str = BETA_DETAILED_MODEL_URL,
+    file_hashes: dict[str, str] | None = None,
+) -> Path:
+    """Fetch the opt-in Dataset737 model once and verify its three source files."""
+    verified = cached_beta_detailed_model(cache_root=cache_root, file_hashes=file_hashes)
+    if verified is not None:
+        return verified
+    root = (
+        Path(cache_root).expanduser().resolve() / BETA_DETAILED_MODEL_VERSION
+        if cache_root is not None
+        else default_model_bundle_cache_dir(version=BETA_DETAILED_MODEL_VERSION)
+    )
+    root.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="spine-segment-beta-", dir=str(root.parent)) as tmp_name:
+        temporary = Path(tmp_name)
+        archive = temporary / BETA_DETAILED_MODEL_ASSET
+        try:
+            _download_file(download_url, archive)
+            extracted = temporary / "extracted"
+            extracted.mkdir()
+            _extract_zip_safely(archive, extracted)
+            staged = _find_beta_model_root(extracted)
+            _verify_bundle_hashes(staged, file_hashes or BETA_DETAILED_MODEL_FILE_HASHES)
+            from spine_segment.beta_subregions import _validate_model_folder
+            _validate_model_folder(staged)
+        except (OSError, URLError, zipfile.BadZipFile, ValueError) as exc:
+            raise ModelBundleDownloadError(
+                f"Unable to install beta detailed model from {download_url}: {exc}"
+            ) from exc
+        if root.exists():
+            shutil.rmtree(root)
+        shutil.move(str(staged), str(root))
+    return root
+
+
+def _find_beta_model_root(extracted: Path) -> Path:
+    if (extracted / "dataset.json").is_file():
+        return extracted
+    candidates = [path for path in extracted.iterdir()
+                  if path.is_dir() and (path / "dataset.json").is_file()]
+    if len(candidates) == 1:
+        return candidates[0]
+    raise ModelBundleDownloadError("Beta model archive must contain dataset.json at its root")
+
+
+def resolve_beta_detailed_model(
+    *, bundle_root: str | Path | None = None, allow_download: bool = True,
+) -> Path:
+    """Find a checked-out model or verified cache, downloading only when allowed."""
+    from spine_segment.beta_subregions import _validate_model_folder
+    candidates = []
+    if bundle_root is not None:
+        candidates.append(Path(bundle_root) / "beta_detailed")
+    candidates.append(Path(__file__).resolve().parents[2] / "build" / "model-bundle-pytorch" / "beta_detailed")
+    for candidate in candidates:
+        if candidate.is_dir():
+            _verify_bundle_hashes(candidate, BETA_DETAILED_MODEL_FILE_HASHES)
+            _validate_model_folder(candidate)
+            return candidate
+    cached = cached_beta_detailed_model()
+    if cached is not None:
+        return cached
+    if not allow_download:
+        raise ModelBundleDownloadError(
+            "Beta detailed model is not cached; rerun without --no-model-download"
+        )
+    return ensure_beta_detailed_model()
 
 
 def _download_file(url: str, output_path: Path) -> None:

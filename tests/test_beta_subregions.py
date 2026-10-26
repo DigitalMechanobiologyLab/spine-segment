@@ -79,6 +79,40 @@ def test_beta_cli_rejects_incompatible_modes_before_model_load(tmp_path, monkeyp
     assert exc.value.code == 2
 
 
+def test_beta_cli_resolves_shipped_model_without_folder(tmp_path, monkeypatch):
+    source = tmp_path / "scan.nii.gz"
+    source.touch()
+    model = tmp_path / "beta_model"
+    (model / "fold_0").mkdir(parents=True)
+    (model / "fold_0" / "checkpoint_best.pth").touch()
+    (model / "plans.json").write_text("{}")
+    (model / "dataset.json").write_text(json.dumps({
+        "labels": {"background": 0, **{name: value for value, name in
+                                    beta_subregions.CLASS_NAMES.items()}}
+    }))
+    monkeypatch.setattr(cli, "create_native_backend", lambda *a, **k: object())
+    monkeypatch.setattr(cli, "resolve_beta_detailed_model", lambda **k: model)
+    def execute(**kwargs):
+        assert kwargs["beta_detailed_model"] == model
+        return []
+    monkeypatch.setattr(cli, "segment_files", execute)
+    assert cli.main([str(source), "--output", str(tmp_path / "out"),
+                     "--beta-detailed-labels"]) == 0
+
+
+def test_beta_cli_no_download_requires_cached_or_local_model(tmp_path, monkeypatch):
+    source = tmp_path / "scan.nii.gz"
+    source.touch()
+    monkeypatch.setattr(cli, "create_native_backend", lambda *a, **k: object())
+    from spine_segment.model_bundle import ModelBundleDownloadError
+    def resolve(**kwargs):
+        assert kwargs["allow_download"] is False
+        raise ModelBundleDownloadError("not cached")
+    monkeypatch.setattr(cli, "resolve_beta_detailed_model", resolve)
+    assert cli.main([str(source), "--output", str(tmp_path / "out"),
+                     "--beta-detailed-labels", "--no-model-download"]) == 2
+
+
 def test_beta_inference_uses_mask_crops_and_reassembles(tmp_path, monkeypatch):
     model = tmp_path / "model"
     (model / "fold_0").mkdir(parents=True)
