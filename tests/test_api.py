@@ -138,11 +138,65 @@ def test_segment_file_writes_default_outputs(tmp_path: Path) -> None:
     assert result.output_paths.process_body.exists()
     assert result.output_paths.cort_trab.exists()
     assert result.output_paths.centroids.exists()
+    assert not result.output_paths.detailed_subregions.exists()
     payload = json.loads(result.output_paths.centroids.read_text(encoding="utf-8"))
     assert payload["centroids"]["20"]["voxel_xyz"] == [2.0, 2.0, 2.0]
     assert payload["centroids"]["20"]["voxel_count"] == 27
     assert payload["centroids"]["20"]["source"] == "segmentation"
     assert not list((tmp_path / "out").glob(".spine-segment-tmp-*"))
+
+
+def test_segment_file_beta_writes_detailed_labels_and_provenance(tmp_path, monkeypatch):
+    from spine_segment import beta_subregions
+    image = sitk.GetImageFromArray(np.full((6, 6, 6), 200.0, np.float32))
+    source = tmp_path / "case.nii.gz"
+    sitk.WriteImage(image, str(source))
+
+    def fake_predict(levels, model_folder, *, device):
+        assert model_folder == "model"
+        assert device == "cpu"
+        detail = sitk.GetImageFromArray((sitk.GetArrayFromImage(levels) > 0).astype(np.uint8))
+        detail.CopyInformation(levels)
+        return detail, {20: {"owner_voxels": 27}}
+
+    monkeypatch.setattr(beta_subregions, "predict_detailed_subregions", fake_predict)
+    result = segment_file(source, tmp_path / "out", backend=_StubBackend(),
+                          device="cpu", beta_detailed_model="model")
+    assert result.output_paths.detailed_subregions.exists()
+    payload = json.loads(result.output_paths.centroids.read_text())
+    assert payload["metadata"]["beta_detailed_subregions"]["schema"] == "dataset737"
+    assert payload["metadata"]["beta_detailed_subregions"]["anatomical_validation"] is False
+
+
+def test_segment_file_beta_auto_resolves_model(tmp_path, monkeypatch):
+    from spine_segment import beta_subregions, model_bundle
+    source = tmp_path / "case.nii.gz"
+    sitk.WriteImage(sitk.Image([6, 6, 6], sitk.sitkFloat32), str(source))
+    monkeypatch.setattr(model_bundle, "resolve_beta_detailed_model", lambda **k: tmp_path / "model")
+    def predict(levels, model_folder, *, device):
+        assert model_folder == tmp_path / "model"
+        detail = sitk.GetImageFromArray((sitk.GetArrayFromImage(levels) > 0).astype(np.uint8))
+        detail.CopyInformation(levels)
+        return detail, {}
+    monkeypatch.setattr(beta_subregions, "predict_detailed_subregions", predict)
+    result = segment_file(source, tmp_path / "out", backend=_StubBackend(),
+                          device="cpu", beta_detailed_labels=True)
+    assert result.output_paths.detailed_subregions.is_file()
+
+
+def test_beta_prediction_failure_does_not_leave_standard_outputs(tmp_path, monkeypatch):
+    from spine_segment import beta_subregions
+    source = tmp_path / "case.nii.gz"
+    sitk.WriteImage(sitk.Image([6, 6, 6], sitk.sitkFloat32), str(source))
+
+    def fail_predict(*args, **kwargs):
+        raise RuntimeError("predictor unavailable")
+
+    monkeypatch.setattr(beta_subregions, "predict_detailed_subregions", fail_predict)
+    with pytest.raises(RuntimeError, match="unavailable"):
+        segment_file(source, tmp_path / "out", backend=_StubBackend(),
+                     device="cpu", beta_detailed_model="model")
+    assert not list((tmp_path / "out").glob("*.nii.gz"))
 
 
 def test_segment_file_level_only_writes_only_vertebral_level(tmp_path: Path) -> None:

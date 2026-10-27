@@ -8,6 +8,9 @@ from spine_segment.api import segment_files
 from spine_segment.backend import SpineSegmentBackendError, load_backend
 from spine_segment.compartments import CortTrabConfig
 from spine_segment.io import expand_input_paths
+from spine_segment.model_bundle import (
+    ModelBundleDownloadError, resolve_beta_detailed_model,
+)
 from spine_segment.native_torch_backend import create_backend as create_native_backend
 from spine_segment.sequence_solver import SpineSequenceConfig
 
@@ -67,6 +70,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--centroids",
         help="Existing *_centroids.json artifact used by --level-only instead of localization.",
+    )
+    parser.add_argument(
+        "--beta-detailed-labels",
+        action="store_true",
+        help="Experimental ten-class vertebra labels; uses the packaged model or a verified download.",
+    )
+    parser.add_argument(
+        "--beta-detailed-model",
+        help="Optional override for the experimental Dataset737 model folder.",
     )
     parser.add_argument(
         "--sequence-confidence-weight",
@@ -129,6 +141,16 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--centroids requires exactly one input CT.")
     if args.centroids and not Path(args.centroids).is_file():
         parser.error(f"Centroid artifact does not exist: {args.centroids}")
+    if args.beta_detailed_model and args.beta_detailed_labels:
+        parser.error("Choose either --beta-detailed-labels or --beta-detailed-model")
+    if (args.beta_detailed_model or args.beta_detailed_labels) and (args.level_only or args.localization_only):
+        parser.error("Beta detailed labels require full segmentation")
+    if args.beta_detailed_model:
+        from spine_segment.beta_subregions import _validate_model_folder
+        try:
+            _validate_model_folder(Path(args.beta_detailed_model))
+        except ValueError as exc:
+            parser.error(str(exc))
 
     try:
         sequence_config = SpineSequenceConfig(lambda_weight=args.sequence_confidence_weight)
@@ -148,6 +170,16 @@ def main(argv: list[str] | None = None) -> int:
         backend.vertebra_segmentation_batch_size = max(1, int(args.vertebra_batch_size))
     if hasattr(backend, "process_body_batch_size"):
         backend.process_body_batch_size = max(1, int(args.process_body_batch_size))
+    detailed_model = args.beta_detailed_model
+    if args.beta_detailed_labels:
+        try:
+            detailed_model = resolve_beta_detailed_model(
+                bundle_root=getattr(backend, "bundle_root", None),
+                allow_download=not bool(args.no_model_download),
+            )
+        except (ModelBundleDownloadError, ValueError) as exc:
+            print(f"[spine-segment] beta model error: {exc}")
+            return 2
     cort_trab_config = CortTrabConfig(
         cortical_threshold_hu=float(args.cortical_threshold_hu),
         isotropic_spacing_mm=float(args.cort_trab_isotropic_spacing_mm),
@@ -164,6 +196,7 @@ def main(argv: list[str] | None = None) -> int:
             level_only=bool(args.level_only),
             localization_only=bool(args.localization_only),
             centroids_path=args.centroids,
+            beta_detailed_model=detailed_model,
         )
     except SpineSegmentBackendError as exc:
         print(f"[spine-segment] backend error: {exc}")
@@ -171,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
     except FileExistsError as exc:
         print(f"[spine-segment] output exists: {exc}")
         return 2
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RuntimeError) as exc:
         print(f"[spine-segment] input error: {exc}")
         return 2
 
@@ -188,6 +221,8 @@ def main(argv: list[str] | None = None) -> int:
             if not args.level_only:
                 fields.append(f"process_body={result.output_paths.process_body}")
                 fields.append(f"cort_trab={result.output_paths.cort_trab}")
+                if detailed_model:
+                    fields.append(f"detailed_subregions={result.output_paths.detailed_subregions}")
         print("[spine-segment] " + " ".join(fields))
     return 0
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spine-segment"
-version = "0.1.6"
+version = "0.1.7b1"
 description = "Standalone CLI-first vertebral CT segmentation package"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -27,7 +27,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=8"]
+test = ["pytest>=8", "scipy>=1.11"]
+beta = ["nnunetv2>=2,<3", "scipy>=1.11"]
 
 [project.scripts]
 spine-segment = "spine_segment.cli:main"
@@ -40,4 +41,10 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-spine_segment = ["resources/*.pickle"]
+spine_segment = [
+  "resources/*.pickle",
+  "models/beta_detailed/dataset.json",
+  "models/beta_detailed/plans.json",
+  "models/beta_detailed/MODEL_CARD.txt",
+  "models/beta_detailed/fold_0/checkpoint_best.pth",
+]

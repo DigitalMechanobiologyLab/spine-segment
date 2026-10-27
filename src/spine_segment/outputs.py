@@ -10,6 +10,7 @@ class OutputPaths:
     process_body: Path
     cort_trab: Path
     centroids: Path
+    detailed_subregions: Path
 
 
 def _input_stem(path: Path) -> str:
@@ -30,4 +31,5 @@ def build_output_paths(input_path: str | Path, output_dir: str | Path) -> Output
         process_body=out_dir / f"{stem}_process-body.nii.gz",
         cort_trab=out_dir / f"{stem}_cort-trab.nii.gz",
         centroids=out_dir / f"{stem}_centroids.json",
+        detailed_subregions=out_dir / f"{stem}_detailed-subregions-beta.nii.gz",
     )

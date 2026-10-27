@@ -42,6 +42,8 @@ def segment_file(
     level_only: bool = False,
     localization_only: bool = False,
     centroids_path: str | Path | None = None,
+    beta_detailed_labels: bool = False,
+    beta_detailed_model: str | Path | None = None,
 ) -> SegmentRunResult:
     if level_only and localization_only:
         raise ValueError("level_only and localization_only are mutually exclusive")
@@ -49,11 +51,26 @@ def segment_file(
         raise ValueError("centroids_path requires level_only=True")
     if centroids_path is not None and localization_only:
         raise ValueError("centroids_path cannot be combined with localization_only=True")
+    if beta_detailed_labels and beta_detailed_model is not None:
+        raise ValueError("Choose beta_detailed_labels or beta_detailed_model")
+    if (beta_detailed_labels or beta_detailed_model is not None) and (level_only or localization_only):
+        raise ValueError("Beta detailed labels require full segmentation")
+    if beta_detailed_labels:
+        from spine_segment.model_bundle import resolve_beta_detailed_model
+        beta_detailed_model = resolve_beta_detailed_model(
+            bundle_root=getattr(backend, "bundle_root", None)
+        )
 
     source_path = Path(input_path)
     image = read_image(source_path, pixel_type=sitk.sitkFloat32)
     selected_device = resolve_device(device)
     output_paths = build_output_paths(source_path, output_dir)
+    if beta_detailed_model is not None and not overwrite:
+        for path in (output_paths.vertebral_level, output_paths.process_body,
+                     output_paths.cort_trab, output_paths.centroids,
+                     output_paths.detailed_subregions):
+            if path.exists():
+                raise FileExistsError(f"Refusing to overwrite existing output: {path}")
     if localization_only:
         localization = backend.localize(
             image=image,
@@ -102,6 +119,17 @@ def segment_file(
             level_only=level_only,
         )
 
+    detailed = report = None
+    if beta_detailed_model is not None:
+        if result.process_body is None:
+            raise SpineSegmentBackendError(
+                "Beta detailed labels require a full process/body segmentation."
+            )
+        from spine_segment.beta_subregions import predict_detailed_subregions
+        detailed, report = predict_detailed_subregions(
+            result.vertebral_level, beta_detailed_model, device=selected_device
+        )
+
     write_image(result.vertebral_level, output_paths.vertebral_level, overwrite=overwrite)
     centroids = centroids_from_labelmap(result.vertebral_level)
     if level_only:
@@ -141,8 +169,16 @@ def segment_file(
     write_image(result.process_body, output_paths.process_body, overwrite=overwrite)
     write_image(cort_trab, output_paths.cort_trab, overwrite=overwrite)
 
+    if beta_detailed_model is not None:
+        write_image(detailed, output_paths.detailed_subregions, overwrite=overwrite)
+
     metadata = dict(result.metadata or {})
     metadata["device"] = selected_device
+    if beta_detailed_model is not None:
+        metadata["beta_detailed_subregions"] = {
+            "schema": "dataset737", "anatomical_validation": False,
+            "outgrowth_is_diagnostic": False, "levels": report,
+        }
     write_centroids_json(
         input_path=source_path,
         centroids=centroids,
@@ -169,6 +205,8 @@ def segment_files(
     level_only: bool = False,
     localization_only: bool = False,
     centroids_path: str | Path | None = None,
+    beta_detailed_labels: bool = False,
+    beta_detailed_model: str | Path | None = None,
 ) -> list[SegmentRunResult]:
     if centroids_path is not None and len(input_paths) != 1:
         raise ValueError("centroids_path requires exactly one input CT")
@@ -183,6 +221,8 @@ def segment_files(
             level_only=level_only,
             localization_only=localization_only,
             centroids_path=centroids_path,
+            beta_detailed_labels=beta_detailed_labels,
+            beta_detailed_model=beta_detailed_model,
         )
         for path in input_paths
     ]
